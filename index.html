@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
@@ -219,11 +219,11 @@ let best = 0;
 let lives = 3;
 let milestone = { text: "", t: 0 };
 const MILESTONES = {
-  8: "八枚了",
-  16: "过一半了",
-  24: "还有二十三",
-  32: "快了",
-  40: "最后七枚",
+  8: "爸",
+  14: "生日快乐",
+  22: "你辛苦了",
+  31: "祝你天天开心",
+  40: "永远不死",
 };
 let overT = 0;
 let missiles = [];
@@ -603,14 +603,16 @@ function drawMilestone() {
   if (!milestone.text || milestone.t <= 0) return;
   const a = Math.min(1, (1.8 - milestone.t) / 0.30, milestone.t / 0.55);
   if (a <= 0) return;
+  const n = [...milestone.text].length;
+  const sz = n <= 1 ? 48 : n <= 3 ? 40 : 32;
   ctx.save();
   ctx.globalAlpha = a;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.shadowColor = "rgba(255,190,110,0.9)";
-  ctx.shadowBlur = 22 * S;
+  ctx.shadowBlur = 24 * S;
   ctx.fillStyle = "#fff2d4";
-  ctx.font = `600 ${30 * S}px "Noto Serif SC","Songti SC",serif`;
+  ctx.font = `600 ${sz * S}px "Noto Serif SC","Songti SC",serif`;
   ctx.fillText(milestone.text, W / 2, H * 0.40 - (1 - a) * 10 * S);
   ctx.restore();
 }
@@ -1227,7 +1229,7 @@ if (_q.has("play")) {
 } else if (_q.has("ms")) {
   mode = "play";
   got = parseInt(_q.get("ms") || "8", 10);
-  milestone = { text: MILESTONES[got] || "过一半了", t: 1.2 };
+  milestone = { text: MILESTONES[got] || "永远不死", t: 1.2 };
 } else if (_q.has("demo")) {
   mode = "play";
   player.y = 0;
