@@ -19,7 +19,10 @@
 </head>
 <body>
 <canvas id="cv"></canvas>
-<audio id="bgmTrack" src="bgm.mp3" loop preload="metadata"></audio>
+<audio id="bgmTrack" loop preload="auto">
+  <source src="bgm.m4a" type="audio/mp4">
+  <source src="bgm.mp3" type="audio/mpeg">
+</audio>
 <script>
 "use strict";
 
@@ -1186,12 +1189,30 @@ function update(dt) {
 /* ══════════════════════════════  输入  ══════════════════════════════ */
 const TRACK = document.getElementById("bgmTrack");
 if (TRACK) TRACK.volume = 0.42;
-let trackOn = false;
+let trackOn = false, trackTries = 0;
 function startTrack() {
   if (!TRACK || trackOn) return;
-  trackOn = true;
-  const p = TRACK.play();
-  if (p && p.catch) p.catch(() => { trackOn = false; });
+  const fire = () => {
+    if (trackOn) return;
+    try { TRACK.load(); } catch (e) {}
+    const p = TRACK.play();
+    if (p && p.then) {
+      p.then(() => { trackOn = true; }).catch(() => {
+        trackTries++;
+        if (trackTries < 6) setTimeout(fire, 450);
+      });
+    } else {
+      trackOn = true;
+    }
+  };
+  fire();
+  if (typeof WeixinJSBridge !== "undefined") {
+    try { WeixinJSBridge.invoke("getNetworkType", {}, fire); } catch (e) { fire(); }
+  } else {
+    document.addEventListener("WeixinJSBridgeReady", fire, false);
+  }
+  document.addEventListener("touchstart", fire, { once: true, passive: true });
+  document.addEventListener("click", fire, { once: true });
 }
 function toggleTrack() {
   if (!TRACK) return;
