@@ -112,61 +112,46 @@ const CFG = {
 
 let plats = [];
 let coins = [];
-let goalX = 0;
-let levelLen = 0;
+let levelEndX = 0;
+
+function addPlatform() {
+  const last = plats[plats.length - 1];
+  const gap = rand(78, 112);
+  let dy = rand(-88, 88);
+  if (last.y > 78) dy = -Math.abs(dy) * 0.85;
+  if (last.y < -78) dy = Math.abs(dy) * 0.85;
+  const y = clamp(last.y + dy, -122, 122);
+  const w = rand(230, 345);
+  const p = { x: levelEndX + gap, y, w };
+  plats.push(p);
+  levelEndX = p.x + p.w;
+
+  const n = 2 + (Math.random() < 0.55 ? 1 : 0);
+  for (let i = 0; i < n; i++) {
+    const t = (i + 0.55) / (n + 0.15);
+    coins.push({ x: p.x + p.w * t, y: p.y - 98, taken: false, ph: Math.random() * 6.28 });
+  }
+  if (Math.random() < 0.55) {
+    coins.push({ x: p.x - gap * 0.5, y: Math.min(p.y, last.y) - 126, taken: false, ph: Math.random() * 6.28 });
+  }
+}
 
 function buildLevel() {
   plats = [];
   coins = [];
+  plats.push({ x: 0, y: 0, w: 330 });
+  levelEndX = 330;
+  coins.push({ x: 130, y: -98, taken: false, ph: 0.4 });
+  coins.push({ x: 250, y: -98, taken: false, ph: 2.1 });
+  for (let i = 0; i < 6; i++) addPlatform();
+}
 
-  const segs = [
-    { gap: 0,   dy: 0,    w: 330 },
-    { gap: 95,  dy: -20,  w: 300 },
-    { gap: 80,  dy: -70,  w: 260 },
-    { gap: 112, dy: 40,   w: 320 },
-    { gap: 70,  dy: -55,  w: 230 },
-    { gap: 110, dy: -40,  w: 280 },
-    { gap: 85,  dy: 95,   w: 340 },
-    { gap: 100, dy: -30,  w: 250 },
-    { gap: 75,  dy: -85,  w: 220 },
-    { gap: 118, dy: -25,  w: 300 },
-    { gap: 90,  dy: 70,   w: 310 },
-    { gap: 105, dy: -50,  w: 240 },
-    { gap: 70,  dy: -60,  w: 260 },
-    { gap: 112, dy: 30,   w: 330 },
-    { gap: 80,  dy: -75,  w: 250 },
-    { gap: 108, dy: -20,  w: 420 },
-  ];
-
-  let x = 0, y = 0;
-  for (let i = 0; i < segs.length; i++) {
-    const s = segs[i];
-    x += s.gap;
-    y += s.dy;
-    plats.push({ x, y, w: s.w });
-    x += s.w;
-  }
-  levelLen = x;
-  goalX = x - 70;
-
-  const raw = [];
-  for (let i = 0; i < plats.length; i++) {
-    const p = plats[i];
-    const n = i === 0 ? 2 : 3;
-    for (let k = 0; k < n; k++) {
-      const t = (k + 0.55) / (n + 0.15);
-      raw.push({ x: p.x + p.w * t, y: p.y - 98 });
-    }
-    if (i < plats.length - 1) {
-      const nx = plats[i + 1];
-      const gx = p.x + p.w + (nx.x - (p.x + p.w)) * 0.5;
-      raw.push({ x: gx, y: Math.min(p.y, nx.y) - 126 });
-    }
-  }
-  const step = raw.length / CFG.coinTotal;
-  for (let i = 0; i < CFG.coinTotal; i++) {
-    const c = raw[Math.floor(i * step)];
-    coins.push({ x: c.x, y: c.y, taken: false, ph: Math.random() * 6.28 });
+function extendWorld() {
+  while (levelEndX < player.x + W * 1.7) addPlatform();
+  const cut = player.x - W * 1.2;
+  while (plats.length > 3 && plats[0].x + plats[0].w < cut) plats.shift();
+  for (let i = coins.length - 1; i >= 0; i--) {
+    if (coins[i].taken || coins[i].x < cut) coins.splice(i, 1);
   }
 }
 
@@ -261,6 +246,7 @@ function updatePlay(dt) {
 
   updateMissiles(dt);
 
+  extendWorld();
   best = Math.max(best, p.x);
 }
 
@@ -465,32 +451,25 @@ function drawHills() {
 
 function drawGoal() {
   if (got < CFG.coinTotal) return;
-  const gx = goalX - camX;
+  const gx = player.x + 30 * S - camX;
   if (gx < -120 || gx > W + 200) return;
-  const top = plats[plats.length - 1].y + BASEY();
-  const gy = top;
+  const gy = player.y + BASEY();
 
   ctx.strokeStyle = "#ffe1a8";
   ctx.lineWidth = 3 * S;
   ctx.beginPath();
   ctx.moveTo(gx, gy);
-  ctx.lineTo(gx, gy - 150 * S);
+  ctx.lineTo(gx, gy - 118 * S);
   ctx.stroke();
 
-  const wav = Math.sin(time * 3) * 4 * S;
+  const wav = Math.sin(time * 3) * 3.5 * S;
   ctx.fillStyle = "#ff5f6d";
   ctx.beginPath();
-  ctx.moveTo(gx, gy - 150 * S);
-  ctx.quadraticCurveTo(gx + 44 * S, gy - 138 * S + wav, gx + 76 * S, gy - 122 * S);
-  ctx.quadraticCurveTo(gx + 44 * S, gy - 108 * S - wav, gx, gy - 98 * S);
+  ctx.moveTo(gx, gy - 118 * S);
+  ctx.quadraticCurveTo(gx + 28 * S, gy - 108 * S + wav, gx + 50 * S, gy - 96 * S);
+  ctx.quadraticCurveTo(gx + 28 * S, gy - 84 * S - wav, gx, gy - 74 * S);
   ctx.closePath();
   ctx.fill();
-
-  ctx.fillStyle = "#ffe9a8";
-  ctx.font = `700 ${13 * S}px "Noto Sans SC",sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("终点", gx, gy - 168 * S);
 }
 
 function drawPlats() {
@@ -751,7 +730,7 @@ function drawHUD() {
   ctx.fillStyle = "rgba(255,255,255,0.16)";
   roundRect(pad, by, bw, 4 * S, 2 * S);
   ctx.fill();
-  const pr = clamp(best / goalX, 0, 1);
+  const pr = clamp(got / CFG.coinTotal, 0, 1);
   const pg = ctx.createLinearGradient(pad, 0, pad + bw, 0);
   pg.addColorStop(0, "#ffd97a");
   pg.addColorStop(1, "#ff9d5c");
@@ -807,7 +786,8 @@ function drawIntro() {
   ctx.globalAlpha = a * 0.72;
   ctx.fillStyle = "rgba(255,220,180,0.85)";
   ctx.font = `400 ${14 * S}px "Noto Sans SC",sans-serif`;
-  ctx.fillText("点屏幕跳 · 躲导弹 · 收满 47 枚", W / 2, H * 0.70 + 34 * S);
+  ctx.fillText("点一下跳 · 空中再点一次二段跳", W / 2, H * 0.70 + 34 * S);
+  ctx.fillText("躲导弹 · 一直跑 · 收满 47 枚就通关", W / 2, H * 0.70 + 56 * S);
 
   ctx.globalAlpha = 1;
 }
@@ -1079,10 +1059,10 @@ if (_q.has("play")) {
     { x: 160, y: -58, vx: 0, t: 0, ph: 2 },
   ];
   missileTimer = 9999;
-} else if (_q.has("far")) {
+} else if (_q.has("at")) {
   mode = "play";
-  const k = parseFloat(_q.get("far") || "0.8");
-  player.x = goalX * k;
+  player.x = parseFloat(_q.get("at") || "600");
+  extendWorld();
   camX = player.x - W * 0.30;
   const g = groundAt(player.x, -9999);
   player.y = g === null ? 0 : g;
