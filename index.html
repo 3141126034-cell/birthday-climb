@@ -255,6 +255,7 @@ function updatePlay(dt) {
       c.taken = true; got++;
       AU.coin();
       burst(c.x, c.y, 10, "#ffd97a");
+      if (got >= CFG.coinTotal) { win(); return; }
     }
   }
 
@@ -262,10 +263,7 @@ function updatePlay(dt) {
 
   best = Math.max(best, p.x);
 
-  if (p.x >= goalX) {
-    if (got >= CFG.coinTotal) win();
-    else reachGoalShort();
-  }
+  if (p.x >= goalX) reachGoalShort();
 }
 
 /* ── 导弹 ── */
@@ -468,6 +466,7 @@ function drawHills() {
 }
 
 function drawGoal() {
+  if (got < CFG.coinTotal) return;
   const gx = goalX - camX;
   if (gx < -120 || gx > W + 200) return;
   const top = plats[plats.length - 1].y + BASEY();
@@ -835,6 +834,25 @@ function drawWin() {
       ctx.arc(px, py, (3.2 - k * 2.2) * S, 0, 6.2832);
       ctx.fill();
     }
+  }
+
+  const px = player.x - camX;
+  const py = player.y + BASEY();
+  if (px > -60 && px < W + 60) {
+    ctx.strokeStyle = "#ffe1a8";
+    ctx.lineWidth = 2.6 * S;
+    ctx.beginPath();
+    ctx.moveTo(px + 30 * S, py);
+    ctx.lineTo(px + 30 * S, py - 118 * S);
+    ctx.stroke();
+    const wav = Math.sin(time * 3) * 3.5 * S;
+    ctx.fillStyle = "#ff5f6d";
+    ctx.beginPath();
+    ctx.moveTo(px + 30 * S, py - 118 * S);
+    ctx.quadraticCurveTo(px + 58 * S, py - 108 * S + wav, px + 80 * S, py - 96 * S);
+    ctx.quadraticCurveTo(px + 58 * S, py - 84 * S - wav, px + 30 * S, py - 74 * S);
+    ctx.closePath();
+    ctx.fill();
   }
 
   const cy = H * 0.40;
