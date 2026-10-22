@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
@@ -70,8 +70,47 @@ const AU = (() => {
     o.connect(g); g.connect(master);
     o.start(t); o.stop(t + dur + 0.02);
   }
+
+  const SCALE = [523.25, 587.33, 659.25, 783.99, 880.00, 1046.50];
+  const MELODY = [0, 2, 4, 5, 4, 2, 0, 2, 3, 2, 0, -1, 1, 2, 3, 4];
+  const bg = { on: false, next: 0, step: 0, beat: 0.44 };
+  function bgmNote(freq, when, dur, g, type) {
+    if (!actx || muted) return;
+    const o = actx.createOscillator(), gn = actx.createGain();
+    o.type = type || "triangle";
+    o.frequency.setValueAtTime(freq, when);
+    gn.gain.setValueAtTime(0, when);
+    gn.gain.linearRampToValueAtTime(g, when + 0.03);
+    gn.gain.exponentialRampToValueAtTime(0.0008, when + dur);
+    o.connect(gn); gn.connect(master);
+    o.start(when); o.stop(when + dur + 0.03);
+  }
+  function bgmStart() {
+    if (!actx || bg.on) return;
+    bg.on = true; bg.step = 0;
+    bg.next = actx.currentTime + 0.25;
+  }
+  function bgmStop() { bg.on = false; }
+  function bgmTick() {
+    if (!actx || !bg.on || muted) return;
+    while (bg.next < actx.currentTime + 0.8) {
+      const i = bg.step % MELODY.length;
+      const n = MELODY[i];
+      const t = bg.next;
+      if (n >= 0) {
+        bgmNote(SCALE[n], t, 0.96, 0.055);
+        bgmNote(SCALE[n] * 2, t, 0.55, 0.018);
+      }
+      if (i % 4 === 0) {
+        const root = [261.63, 196.00, 220.00, 174.61][Math.floor(bg.step / 4) % 4];
+        bgmNote(root, t, 1.7, 0.05, "sine");
+      }
+      bg.step++;
+      bg.next += bg.beat;
+    }
+  }
   return {
-    init, resume,
+    init, resume, bgmStart, bgmStop, bgmTick,
     jump()   { tone(520, 0, 0.16, "triangle", 0.20, 880); },
     jump2()  { tone(720, 0, 0.14, "triangle", 0.17, 1180); tone(1180, 0.05, 0.10, "triangle", 0.10, 1520); },
     land()   { tone(180, 0, 0.10, "sine", 0.14, 120); },
@@ -178,6 +217,14 @@ const BASEY = () => H * 0.66;
 let got = 0;
 let best = 0;
 let lives = 3;
+let milestone = { text: "", t: 0 };
+const MILESTONES = {
+  8: "八枚了",
+  16: "过一半了",
+  24: "还有二十三",
+  32: "快了",
+  40: "最后七枚",
+};
 let overT = 0;
 let missiles = [];
 let missileTimer = 1.4;
@@ -192,6 +239,7 @@ function reset() {
   camX = 0; camShake = 0; got = 0; best = 0;
   lives = CFG.lives; overT = 0; missiles = []; missileTimer = 1.4;
   particles = []; fireworks = [];
+  milestone = { text: "", t: 0 };
   coins.forEach(c => c.taken = false);
   mode = "intro"; introT = 0; winT = 0; started = true;
 }
@@ -249,6 +297,8 @@ function updatePlay(dt) {
       c.taken = true; got++;
       AU.coin();
       burst(c.x, c.y, 10, "#ffd97a");
+      const ms = MILESTONES[got];
+      if (ms) milestone = { text: ms, t: 1.8 };
       if (got >= CFG.winAt) { win(); return; }
     }
   }
@@ -436,24 +486,93 @@ function drawSky() {
   ctx.fill();
 }
 
+function drawClouds() {
+  const clouds = [
+    { x: 160, y: 0.15, s: 1.15, k: 0.05 },
+    { x: 620, y: 0.10, s: 0.85, k: 0.05 },
+    { x: 1180, y: 0.19, s: 1.35, k: 0.05 },
+    { x: 1720, y: 0.08, s: 0.95, k: 0.05 },
+    { x: 2340, y: 0.16, s: 1.05, k: 0.05 },
+  ];
+  const span = 2900;
+  for (const c of clouds) {
+    let cx = ((c.x - camX * c.k) % span + span) % span - 260;
+    cx += Math.sin(time * 0.12 + c.x) * 8;
+    if (cx < -260 || cx > W + 260) continue;
+    const cy = H * c.y + Math.sin(time * 0.16 + c.x * 0.01) * 5;
+    const r = 44 * S * c.s;
+    ctx.shadowColor = "rgba(255,232,214,0.55)";
+    ctx.shadowBlur = 36 * S;
+    ctx.fillStyle = "rgba(255,244,236,0.40)";
+    for (const d of [[-1.5, 0.15, 0.78], [-0.55, -0.32, 1.0], [0.5, -0.18, 0.88], [1.45, 0.18, 0.7]]) {
+      ctx.beginPath();
+      ctx.ellipse(cx + d[0] * r, cy + d[1] * r, r * d[2], r * d[2] * 0.62, 0, 0, 6.2832);
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+  }
+}
+
+function drawBalloons() {
+  const items = [
+    { x: 340, sp: 26, off: 700, col: "#ff8fa3", col2: "#ff6b8a" },
+    { x: 980, sp: 19, off: 980, col: "#ffcf7a", col2: "#f5a94c" },
+    { x: 1610, sp: 23, off: 400, col: "#a8d8ff", col2: "#7fbdf0" },
+    { x: 2180, sp: 21, off: 1150, col: "#c9b6ff", col2: "#a894f0" },
+  ];
+  const span = 2700;
+  const rise = H * 1.15;
+  for (const b of items) {
+    let bx = b.x - camX * 0.18;
+    bx = ((bx % span) + span) % span - 200;
+    if (bx < -160 || bx > W + 160) continue;
+    const by = H * 1.02 - ((time * b.sp + b.off) % rise);
+    const fade = clamp((H * 0.60 - by) / (H * 0.14), 0, 1);
+    if (fade <= 0.02) continue;
+    const squash = 1 + Math.sin(time * 1.6 + b.off) * 0.04;
+    const r = 17 * S;
+    ctx.globalAlpha = fade;
+    ctx.strokeStyle = "rgba(255,228,200,0.22)";
+    ctx.lineWidth = 1.2 * S;
+    ctx.beginPath();
+    ctx.moveTo(bx, by + r * 1.3);
+    ctx.quadraticCurveTo(bx + 7 * S, by + r * 2.4, bx + 2 * S, by + r * 3.6);
+    ctx.stroke();
+    const bg = ctx.createRadialGradient(bx - r * 0.35, by - r * 0.45, r * 0.2, bx, by, r * 1.35);
+    bg.addColorStop(0, b.col);
+    bg.addColorStop(1, b.col2);
+    ctx.fillStyle = bg;
+    ctx.globalAlpha = 0.80 * fade;
+    ctx.beginPath();
+    ctx.ellipse(bx, by, r, r * 1.22 * squash, 0, 0, 6.2832);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+
 function drawHills() {
   const layers = [
-    { k: 0.12, base: H * 0.66, amp: 46, col: "rgba(60,36,74,0.85)" },
-    { k: 0.26, base: H * 0.74, amp: 38, col: "rgba(44,26,58,0.92)" },
+    { k: 0.05, base: H * 0.50, amp: 52, col: "rgba(88,54,102,0.55)" },
+    { k: 0.10, base: H * 0.57, amp: 46, col: "rgba(70,42,86,0.70)" },
+    { k: 0.20, base: H * 0.64, amp: 38, col: "rgba(50,30,64,0.86)" },
+    { k: 0.32, base: H * 0.70, amp: 30, col: "rgba(34,20,46,0.95)" },
   ];
+  let li = 0;
   for (const L of layers) {
     ctx.fillStyle = L.col;
     ctx.beginPath();
     ctx.moveTo(-40, H);
     const off = -camX * L.k;
+    const seed = li * 1.7;
     for (let x = -40; x <= W + 40; x += 12) {
       const wx = (x - off) * 0.006;
-      const h = Math.sin(wx * 1.7) * 0.5 + Math.sin(wx * 3.9 + 1.2) * 0.3 + Math.sin(wx * 7.3 + 2.4) * 0.2;
+      const h = Math.sin(wx * 1.7 + seed) * 0.5 + Math.sin(wx * 3.9 + 1.2 + seed) * 0.3 + Math.sin(wx * 7.3 + 2.4 + seed) * 0.2;
       ctx.lineTo(x, L.base - h * L.amp);
     }
     ctx.lineTo(W + 40, H);
     ctx.closePath();
     ctx.fill();
+    li++;
   }
 }
 
@@ -480,6 +599,22 @@ function drawGoal() {
   ctx.fill();
 }
 
+function drawMilestone() {
+  if (!milestone.text || milestone.t <= 0) return;
+  const a = Math.min(1, (1.8 - milestone.t) / 0.30, milestone.t / 0.55);
+  if (a <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.shadowColor = "rgba(255,190,110,0.9)";
+  ctx.shadowBlur = 22 * S;
+  ctx.fillStyle = "#fff2d4";
+  ctx.font = `600 ${30 * S}px "Noto Serif SC","Songti SC",serif`;
+  ctx.fillText(milestone.text, W / 2, H * 0.40 - (1 - a) * 10 * S);
+  ctx.restore();
+}
+
 function drawPlats() {
   for (const p of plats) {
     const sx = p.x - camX;
@@ -499,6 +634,29 @@ function drawPlats() {
 
     ctx.fillStyle = "rgba(12,6,18,0.35)";
     ctx.fillRect(sx, y + 3 * S, p.w, 5 * S);
+
+    const seed = Math.round(p.x * 0.13);
+    ctx.lineWidth = 1.5 * S;
+    for (let i = 0; i < 8; i++) {
+      const t1 = ((seed * 7 + i * 37) % 100) / 100;
+      const gx2 = sx + t1 * p.w;
+      if (gx2 < -12 || gx2 > W + 12) continue;
+      const hgt = (5 + ((seed + i * 17) % 10)) * S;
+      ctx.strokeStyle = "rgba(214,190,132,0.42)";
+      ctx.beginPath();
+      ctx.moveTo(gx2, y);
+      ctx.quadraticCurveTo(gx2 + 3.5 * S, y - hgt * 0.7, gx2 + 6 * S, y - hgt);
+      ctx.stroke();
+    }
+    for (let i = 0; i < 6; i++) {
+      const t2 = ((seed * 3 + i * 53) % 100) / 100;
+      const rx = sx + t2 * p.w;
+      if (rx < -12 || rx > W + 12) continue;
+      ctx.fillStyle = "rgba(255,196,156,0.15)";
+      ctx.beginPath();
+      ctx.arc(rx, y + (7 + ((seed + i * 11) % 16)) * S, (1.3 + (i % 3) * 0.7) * S, 0, 6.2832);
+      ctx.fill();
+    }
   }
 }
 
@@ -775,7 +933,7 @@ function drawIntro() {
   ctx.textBaseline = "middle";
 
   ctx.shadowColor = "rgba(255,200,120,0.75)";
-  ctx.shadowBlur = 26 * S;
+  ctx.shadowBlur = 36 * S;
   ctx.fillStyle = "#fff4dc";
   ctx.font = `700 ${46 * S}px "Noto Serif SC","Songti SC",serif`;
   ctx.fillText("生日快乐", W / 2, H * 0.33);
@@ -850,27 +1008,31 @@ function drawWin() {
   ctx.shadowColor = "rgba(255,205,120,0.85)";
   ctx.shadowBlur = 30 * S;
 
-  ctx.fillStyle = "rgba(255,232,200,0.95)";
-  ctx.font = `500 ${22 * S}px "Noto Sans SC",sans-serif`;
-  ctx.fillText("祝 47 岁", W / 2, cy - 62 * S);
+  ctx.fillStyle = "rgba(255,226,186,0.92)";
+  ctx.font = `500 ${26 * S}px "Noto Serif SC","Songti SC",serif`;
+  ctx.fillText("爸，", W / 2, cy - 72 * S);
 
   ctx.fillStyle = "#fff6e0";
   ctx.font = `700 ${50 * S}px "Noto Serif SC","Songti SC",serif`;
-  ctx.fillText("生日快乐", W / 2, cy + 2 * S);
+  ctx.fillText("生日快乐", W / 2, cy - 18 * S);
+
+  ctx.fillStyle = "rgba(255,232,200,0.92)";
+  ctx.font = `500 ${19 * S}px "Noto Sans SC",sans-serif`;
+  ctx.fillText("祝 47 岁", W / 2, cy + 40 * S);
 
   ctx.shadowBlur = 16 * S;
   ctx.shadowColor = "rgba(255,180,90,0.8)";
   ctx.fillStyle = "#ffd97a";
   ctx.font = `700 ${25 * S}px "Noto Serif SC","Songti SC",serif`;
-  ctx.fillText("新的一年", W / 2, cy + 74 * S);
+  ctx.fillText("新的一年", W / 2, cy + 88 * S);
   ctx.font = `700 ${31 * S}px "Noto Serif SC","Songti SC",serif`;
-  ctx.fillText("财源滚滚", W / 2, cy + 112 * S);
+  ctx.fillText("财源滚滚", W / 2, cy + 130 * S);
 
   ctx.shadowBlur = 0;
   ctx.globalAlpha = a * 0.9;
   ctx.fillStyle = "rgba(255,235,205,0.75)";
   ctx.font = `400 ${15 * S}px "Noto Sans SC",sans-serif`;
-  ctx.fillText(`${CFG.winAt} 枚金币，一颗不少`, W / 2, cy + 160 * S);
+  ctx.fillText(`${CFG.winAt} 枚金币，一颗不少`, W / 2, cy + 182 * S);
 
   if (winT > 1.6) {
     const p = 0.45 + 0.35 * Math.sin(winT * 2.6);
@@ -964,7 +1126,9 @@ function roundRect(x, y, w, h, r) {
 function render() {
   if (!skyGrad) makeSky();
   drawSky();
+  drawClouds();
   drawHills();
+  drawBalloons();
 
   if (mode !== "intro") {
     drawPlats();
@@ -973,6 +1137,7 @@ function render() {
     drawMissiles();
     drawPlayer();
     drawParticles();
+    drawMilestone();
     drawHUD();
   }
 
@@ -985,6 +1150,7 @@ function render() {
 /* ══════════════════════════════  更新  ══════════════════════════════ */
 function update(dt) {
   time += dt;
+  if (milestone.t > 0) milestone.t -= dt;
 
   if (mode === "intro") {
     introT += dt;
@@ -1016,7 +1182,7 @@ function update(dt) {
 
 /* ══════════════════════════════  输入  ══════════════════════════════ */
 function press() {
-  AU.init(); AU.resume();
+  AU.init(); AU.resume(); AU.bgmStart();
   if (mode === "intro") {
     mode = "play"; introT = 0;
     player.coyoteT = 0; player.onGround = true;
@@ -1058,6 +1224,10 @@ if (_q.has("play")) {
     x: W * (0.18 + 0.16 * i), y: H * (0.16 + 0.05 * (i % 3)), t: i * 0.22,
     hue: [42, 30, 16, 350, 45][i],
   }));
+} else if (_q.has("ms")) {
+  mode = "play";
+  got = parseInt(_q.get("ms") || "8", 10);
+  milestone = { text: MILESTONES[got] || "过一半了", t: 1.2 };
 } else if (_q.has("demo")) {
   mode = "play";
   player.y = 0;
@@ -1092,6 +1262,7 @@ function loop(t) {
   lastT = t;
   dt = Math.min(dt, 0.05);
   update(dt);
+  AU.bgmTick();
   render();
   requestAnimationFrame(loop);
 }
@@ -1100,6 +1271,8 @@ requestAnimationFrame(loop);
 </script>
 </body>
 </html>
+
+
 
 
 
