@@ -19,6 +19,7 @@
 </head>
 <body>
 <canvas id="cv"></canvas>
+<audio id="bgmTrack" src="bgm.mp3" loop preload="metadata"></audio>
 <script>
 "use strict";
 
@@ -1183,8 +1184,23 @@ function update(dt) {
 }
 
 /* ══════════════════════════════  输入  ══════════════════════════════ */
+const TRACK = document.getElementById("bgmTrack");
+if (TRACK) TRACK.volume = 0.42;
+let trackOn = false;
+function startTrack() {
+  if (!TRACK || trackOn) return;
+  trackOn = true;
+  const p = TRACK.play();
+  if (p && p.catch) p.catch(() => { trackOn = false; });
+}
+function toggleTrack() {
+  if (!TRACK) return;
+  if (TRACK.paused) { TRACK.play().catch(() => {}); }
+  else { TRACK.pause(); }
+}
+
 function press() {
-  AU.init(); AU.resume(); AU.bgmStart();
+  AU.init(); AU.resume(); startTrack();
   if (mode === "intro") {
     mode = "play"; introT = 0;
     player.coyoteT = 0; player.onGround = true;
