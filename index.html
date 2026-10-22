@@ -105,7 +105,8 @@ const CFG = {
   runSpeed: 215,
   gravity: 1850,
   jumpV: -720,
-  coinTotal: 47,
+  coinTotal: 100,
+  winAt: 47,
   coyote: 0.10,
   lives: 3,
 };
@@ -125,15 +126,6 @@ function addPlatform() {
   const p = { x: levelEndX + gap, y, w };
   plats.push(p);
   levelEndX = p.x + p.w;
-
-  const n = 2 + (Math.random() < 0.55 ? 1 : 0);
-  for (let i = 0; i < n; i++) {
-    const t = (i + 0.55) / (n + 0.15);
-    coins.push({ x: p.x + p.w * t, y: p.y - 98, taken: false, ph: Math.random() * 6.28 });
-  }
-  if (Math.random() < 0.55) {
-    coins.push({ x: p.x - gap * 0.5, y: Math.min(p.y, last.y) - 126, taken: false, ph: Math.random() * 6.28 });
-  }
 }
 
 function buildLevel() {
@@ -141,9 +133,26 @@ function buildLevel() {
   coins = [];
   plats.push({ x: 0, y: 0, w: 330 });
   levelEndX = 330;
-  coins.push({ x: 130, y: -98, taken: false, ph: 0.4 });
-  coins.push({ x: 250, y: -98, taken: false, ph: 2.1 });
-  for (let i = 0; i < 6; i++) addPlatform();
+  for (let i = 0; i < 30; i++) addPlatform();
+
+  const spots = [];
+  for (const p of plats) {
+    const n = Math.max(3, Math.round(p.w / 88));
+    for (let k = 0; k < n; k++) {
+      spots.push({
+        x: p.x + (p.w * (k + 0.5)) / n,
+        y: p.y - (k % 2 === 0 ? 98 : 126),
+      });
+    }
+    if (Math.random() < 0.45) {
+      spots.push({ x: p.x + p.w + 24, y: p.y - 140 });
+    }
+  }
+  const step = spots.length / CFG.coinTotal;
+  for (let i = 0; i < CFG.coinTotal; i++) {
+    const c = spots[Math.min(spots.length - 1, Math.floor(i * step))];
+    coins.push({ x: c.x, y: c.y, taken: false, ph: Math.random() * 6.28 });
+  }
 }
 
 function extendWorld() {
@@ -240,13 +249,12 @@ function updatePlay(dt) {
       c.taken = true; got++;
       AU.coin();
       burst(c.x, c.y, 10, "#ffd97a");
-      if (got >= CFG.coinTotal) { win(); return; }
+      if (got >= CFG.winAt) { win(); return; }
     }
   }
 
   updateMissiles(dt);
 
-  extendWorld();
   best = Math.max(best, p.x);
 }
 
@@ -450,7 +458,7 @@ function drawHills() {
 }
 
 function drawGoal() {
-  if (got < CFG.coinTotal) return;
+  if (got < CFG.winAt) return;
   const gx = player.x + 30 * S - camX;
   if (gx < -120 || gx > W + 200) return;
   const gy = player.y + BASEY();
@@ -724,13 +732,13 @@ function drawHUD() {
   ctx.fillText(String(got), pad + r * 2 + 8 * S, pad + r + 1 * S);
   ctx.fillStyle = "rgba(255,235,210,0.62)";
   ctx.font = `400 ${13 * S}px "Noto Sans SC",sans-serif`;
-  ctx.fillText(`/ ${CFG.coinTotal}`, pad + r * 2 + 8 * S + 26 * S, pad + r + 2 * S);
+  ctx.fillText(`/ ${CFG.winAt}`, pad + r * 2 + 8 * S + 26 * S, pad + r + 2 * S);
 
   const bw = W - pad * 2, by = H - pad - 6 * S;
   ctx.fillStyle = "rgba(255,255,255,0.16)";
   roundRect(pad, by, bw, 4 * S, 2 * S);
   ctx.fill();
-  const pr = clamp(got / CFG.coinTotal, 0, 1);
+  const pr = clamp(got / CFG.winAt, 0, 1);
   const pg = ctx.createLinearGradient(pad, 0, pad + bw, 0);
   pg.addColorStop(0, "#ffd97a");
   pg.addColorStop(1, "#ff9d5c");
@@ -862,7 +870,7 @@ function drawWin() {
   ctx.globalAlpha = a * 0.9;
   ctx.fillStyle = "rgba(255,235,205,0.75)";
   ctx.font = `400 ${15 * S}px "Noto Sans SC",sans-serif`;
-  ctx.fillText(`${CFG.coinTotal} 枚金币，一颗不少`, W / 2, cy + 160 * S);
+  ctx.fillText(`${CFG.winAt} 枚金币，一颗不少`, W / 2, cy + 160 * S);
 
   if (winT > 1.6) {
     const p = 0.45 + 0.35 * Math.sin(winT * 2.6);
@@ -893,7 +901,7 @@ function drawOver() {
   ctx.globalAlpha = a * 0.85;
   ctx.fillStyle = "rgba(255,228,210,0.8)";
   ctx.font = `400 ${16 * S}px "Noto Sans SC",sans-serif`;
-  ctx.fillText(`这一趟收下了 ${got} / ${CFG.coinTotal} 枚`, W / 2, H * 0.40 + 48 * S);
+  ctx.fillText(`这一趟收下了 ${got} / ${CFG.winAt} 枚`, W / 2, H * 0.40 + 48 * S);
 
   if (overT > 0.9) {
     const pu = 0.45 + 0.35 * Math.sin(overT * 2.8);
@@ -1045,7 +1053,7 @@ if (_q.has("play")) {
   mode = "play"; introT = 0;
 } else if (_q.has("win")) {
   mode = "win"; winT = parseFloat(_q.get("wt") || "2.0");
-  got = CFG.coinTotal;
+  got = CFG.winAt;
   fireworks = [0, 1, 2, 3, 4].map((i) => ({
     x: W * (0.18 + 0.16 * i), y: H * (0.16 + 0.05 * (i % 3)), t: i * 0.22,
     hue: [42, 30, 16, 350, 45][i],
@@ -1092,6 +1100,7 @@ requestAnimationFrame(loop);
 </script>
 </body>
 </html>
+
 
 
 
